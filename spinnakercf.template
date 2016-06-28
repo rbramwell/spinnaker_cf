@@ -1,21 +1,13 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
   "Parameters": {
-    "SpinnakerVPCCIDR": {
-      "Description": "CIDR Block for Developer VPC",
-      "Type": "String",
-      "Default": "10.100.0.0/16",
-      "AllowedValues": [
-        "10.100.0.0/16"
-      ]
+    "SpinnakerVPC": {
+      "Description": "VPC With a Public Subnet",
+      "Type": "AWS::EC2::VPC::Id"
     },
-    "SpinnakerPublicSubnetCIDR": {
-      "Description": "SpinnakerEnv Public Subnet",
-      "Type": "String",
-      "Default": "10.100.10.0/24",
-      "AllowedValues": [
-        "10.100.10.0/24"
-      ]
+    "SpinnakerPublicSubnet": {
+      "Description": "Public Subnet for Spinnaker",
+      "Type": "AWS::EC2::Subnet::Id"
     },
     "KeyName": {
       "Description": "Key Pair Name",
@@ -33,35 +25,57 @@
   "Mappings": {
     "SpinnakerAMIId": {
       "us-east-1": {
-        "AMI": "ami-7449af19"
+        "AMI": "ami-ad8e61c0"
       },
       "us-west-1": {
-        "AMI": "ami-57cab437"
+        "AMI": "ami-2ae79e4a"
       },
       "us-west-2": {
-        "AMI": "ami-b209fad2"
+        "AMI": "ami-80718ce0"
       },
       "eu-west-1": {
-        "AMI": "ami-39ca424a"
+        "AMI": "ami-e82ea49b"
       },
       "eu-central-1": {
-        "AMI": "ami-d32fcdbc"
+        "AMI": "ami-2603ee49"
       },
       "sa-east-1": {
-        "AMI": "ami-c0ab22ac"
+        "AMI": "ami-46f9712a"
       },
       "ap-southeast-1": {
-        "AMI": "ami-ace136cf"
+        "AMI": "ami-b3de08d0"
       },
       "ap-southeast-2": {
-        "AMI": "ami-0a4f6369"
+        "AMI": "ami-6a80ac09"
       },
       "ap-northeast-1": {
-        "AMI": "ami-ef445e81"
+        "AMI": "ami-6d24c30c"
       }
     }
   },
   "Resources": {
+    "BaseIAMRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/"
+      }
+    },
     "SpinnakerUser": {
       "Description": "User identity Spinnaker uses to create AWS resources",
       "Type": "AWS::IAM::User",
@@ -87,7 +101,12 @@
                   "Action": [
                     "iam:PassRole"
                   ],
-                  "Resource": "arn:aws:iam::730329488449:role/BaseIAMRole"
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "BaseIAMRole",
+                      "Arn"
+                    ]
+                  }
                 }
               ]
             }
@@ -140,7 +159,12 @@
                   "Action": [
                     "iam:PassRole"
                   ],
-                  "Resource": "arn:aws:iam::730329488449:role/BaseIAMRole"
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "BaseIAMRole",
+                      "Arn"
+                    ]
+                  }
                 }
               ]
             }
@@ -160,144 +184,10 @@
         ]
       }
     },
-    "SpinnakerVPC": {
-      "Type": "AWS::EC2::VPC",
-      "Properties": {
-        "CidrBlock": {
-          "Ref": "SpinnakerVPCCIDR"
-        },
-        "EnableDnsSupport": "true",
-        "EnableDnsHostnames": "true",
-        "Tags": [
-          {
-            "Key": "VPC",
-            "Value": "Spinnaker VPC"
-          },
-          {
-            "Key": "Name",
-            "Value": "defaultvpc"
-          }
-        ]
-      }
-    },
-    "SpinnakerInternetGateway": {
-      "Type": "AWS::EC2::InternetGateway",
-      "DependsOn": "SpinnakerVPC"
-    },
-    "SpinnakerAttachGateway": {
-      "Type": "AWS::EC2::VPCGatewayAttachment",
-      "DependsOn": [
-        "SpinnakerVPC",
-        "SpinnakerInternetGateway"
-      ],
-      "Properties": {
-        "VpcId": {
-          "Ref": "SpinnakerVPC"
-        },
-        "InternetGatewayId": {
-          "Ref": "SpinnakerInternetGateway"
-        }
-      }
-    },
-    "SpinnakerPublicSubnet": {
-      "Type": "AWS::EC2::Subnet",
-      "DependsOn": "SpinnakerAttachGateway",
-      "Properties": {
-        "VpcId": {
-          "Ref": "SpinnakerVPC"
-        },
-        "CidrBlock": {
-          "Ref": "SpinnakerPublicSubnetCIDR"
-        },
-        "AvailabilityZone": {
-          "Fn::Select": [
-            "0",
-            {
-              "Fn::GetAZs": ""
-            }
-          ]
-        },
-        "Tags": [
-          {
-            "Key": "Name",
-            "Value": {
-              "Fn::Join": [
-                ".",
-                [
-                  {
-                    "Ref": "SpinnakerVPC"
-                  },
-                  "internal",
-                  {
-                    "Fn::Select": [
-                      "0",
-                      {
-                        "Fn::GetAZs": ""
-                      }
-                    ]
-                  }
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    "SpinnakerPublicRouteTable": {
-      "Type": "AWS::EC2::RouteTable",
-      "DependsOn": [
-        "SpinnakerVPC",
-        "SpinnakerAttachGateway"
-      ],
-      "Properties": {
-        "VpcId": {
-          "Ref": "SpinnakerVPC"
-        },
-        "Tags": [
-          {
-            "Key": "Name",
-            "Value": "Spinnaker Public Route Table"
-          }
-        ]
-      }
-    },
-    "SpinnakerPublicRoute": {
-      "Type": "AWS::EC2::Route",
-      "DependsOn": [
-        "SpinnakerPublicRouteTable",
-        "SpinnakerAttachGateway"
-      ],
-      "Properties": {
-        "RouteTableId": {
-          "Ref": "SpinnakerPublicRouteTable"
-        },
-        "DestinationCidrBlock": "0.0.0.0/0",
-        "GatewayId": {
-          "Ref": "SpinnakerInternetGateway"
-        }
-      }
-    },
-    "SpinnakerPublicSubnetRouteTableAssociation": {
-      "Type": "AWS::EC2::SubnetRouteTableAssociation",
-      "DependsOn": [
-        "SpinnakerPublicRouteTable",
-        "SpinnakerPublicSubnet",
-        "SpinnakerAttachGateway"
-      ],
-      "Properties": {
-        "SubnetId": {
-          "Ref": "SpinnakerPublicSubnet"
-        },
-        "RouteTableId": {
-          "Ref": "SpinnakerPublicRouteTable"
-        }
-      }
-    },
     "SpinnakerWebServerSecurityGroup": {
       "Type": "AWS::EC2::SecurityGroup",
-      "DependsOn": "SpinnakerAttachGateway",
       "Properties": {
-        "GroupDescription": "Security Group for Spinnaker Web server",
+        "GroupDescription": "Public Security Group for Spinnaker Web server",
         "VpcId": {
           "Ref": "SpinnakerVPC"
         },
@@ -325,9 +215,7 @@
       "Type": "AWS::EC2::Instance",
       "DependsOn": [
         "SpinnakerInstanceProfile",
-        "SpinnakerPublicSubnet",
-        "SpinnakerWebServerSecurityGroup",
-        "SpinnakerAttachGateway"
+        "SpinnakerWebServerSecurityGroup"
       ],
       "Properties": {
         "KeyName": {
@@ -371,8 +259,17 @@
                 "/opt/spinnaker/bin/stop_spinnaker.sh\n",
                 "/var/lib/dpkg/info/ca-certificates-java.postinst configure\n",
                 "sed -i 's/name: .*/name: default/g' /opt/spinnaker/config/spinnaker-local.yml\n",
+                "sed -i 's/defaultIAMRole: .*/defaultIAMRole: ",
+                {
+                  "Ref": "BaseIAMRole"
+                },
+                "/g' /opt/spinnaker/config/spinnaker-local.yml\n",
                 "sed -i 's/SPINNAKER_AWS_ENABLED=false/SPINNAKER_AWS_ENABLED=true/g' /etc/default/spinnaker\n",
-                "sed -i 's/SPINNAKER_AWS_DEFAULT_REGION=.*/SPINNAKER_AWS_DEFAULT_REGION=us-west-2/g' /etc/default/spinnaker\n",
+                "sed -i 's/SPINNAKER_AWS_DEFAULT_REGION=.*/SPINNAKER_AWS_DEFAULT_REGION=",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "/g' /etc/default/spinnaker\n",
                 "mkdir /home/spinnaker/.aws/\n",
                 "printf \"[default]\\n",
                 "aws_access_key_id= ",
@@ -409,6 +306,15 @@
         "Fn::GetAtt": [
           "SpinnakerWebServer",
           "PublicDnsName"
+        ]
+      },
+      "Description": "Spinnaker public hostname"
+    },
+    "SpinnakerPublicIP": {
+      "Value": {
+        "Fn::GetAtt": [
+          "SpinnakerWebServer",
+          "PublicIp"
         ]
       },
       "Description": "Spinnaker public hostname"
